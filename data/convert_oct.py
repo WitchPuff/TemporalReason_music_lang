@@ -470,14 +470,14 @@ def encoding_to_str(e):
     #     print("midi_dict is NOT initialized correctly.")
     # else:
     #     print("midi_dict initialized successfully.")
-data_path = 'midi.zip'
+data_path = 'data/midi.zip'
 data_zip = zipfile.ZipFile(data_path, 'r')
 prefix = 'test'
 # if os.path.exists(prefix):
 #     print('Output path {} already exists!'.format(prefix))
 #     sys.exit(0)
 os.makedirs(prefix, exist_ok=True)
-file_list = ['/'.join(n.split('/')[-3:]).replace('._', '') for n in data_zip.namelist() if n[-4:].lower()
+file_list = ['data/'+'/'.join(n.split('/')[-3:]).replace('._', '') for n in data_zip.namelist() if n[-4:].lower()
                 == '.mid' or n[-5:].lower() == '.midi']
 random.shuffle(file_list)
 gen_dictionary('{}/dict.txt'.format(prefix))
