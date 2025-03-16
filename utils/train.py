@@ -163,10 +163,11 @@ def parse_args():
 
     parser = argparse.ArgumentParser(description="Train SharedModel with text and music datasets.")
 
-    parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs")
+    parser.add_argument("--epochs", type=int, default=40, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=10, help="Batch size for training")
-    parser.add_argument("--max_length", type=int, default=512, help="Batch size for training")
-    parser.add_argument("--sample_size", type=int, default=10, help="Batch size for training")
+    parser.add_argument("--text_max_length", type=int, default=512, help="Batch size for training")
+    parser.add_argument("--music_max_length", type=int, default=1024, help="Batch size for training")
+    parser.add_argument("--sample_size", type=int, default=10000, help="Batch size for training")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
     parser.add_argument("--ckpt_dir", type=str, default="train_logs/ckpt", help="Checkpoint directory")
     
@@ -182,25 +183,26 @@ def main():
         name += f"{k}={v}_"
     name += str(time())
     wandb.init(
-        project="music-text-temporal-relation",  # 你的项目名称
-        name=name,  # 运行的名称，可以根据时间或实验参数命名
+        project="music-text-temporal-relation",
+        name=name, 
         config=train_config
     )
     epochs = args.epochs
     batch_size = args.batch_size
     lr = args.lr
     ckpt_dir = os.path.join(args.ckpt_dir, name)
-    os.makedirs(args.ckpt_dir, exist_ok=True)
+    os.makedirs(ckpt_dir, exist_ok=True)
     
     sample_size = args.sample_size
-    max_length = args.max_length
+    text_max_length = args.text_max_length
+    music_max_length = args.music_max_length
     # Prepare Datasets
-    train_loader_text = get_dataloader('data/text', 'train', 'text', batch_size, max_length, sample_size)
-    train_loader_music = get_dataloader('data/midi_oct', 'train', 'music', batch_size, max_length, sample_size)
-    test_loader_text = get_dataloader('data/text', 'test', 'text', batch_size, max_length, sample_size)
-    test_loader_music = get_dataloader('data/midi_oct', 'test', 'music', batch_size, max_length, sample_size)
-    val_loader_text = get_dataloader('data/text', 'valid', 'text', batch_size, max_length, sample_size)
-    val_loader_music = get_dataloader('data/midi_oct', 'valid', 'music', batch_size, max_length, sample_size)
+    train_loader_text = get_dataloader('data/text', 'train', 'text', batch_size, text_max_length, sample_size)
+    train_loader_music = get_dataloader('data/midi_oct', 'train', 'music', batch_size, music_max_length, sample_size)
+    test_loader_text = get_dataloader('data/text', 'test', 'text', batch_size, text_max_length, sample_size // 8)
+    test_loader_music = get_dataloader('data/midi_oct', 'test', 'music', batch_size, music_max_length, sample_size // 8)
+    val_loader_text = get_dataloader('data/text', 'valid', 'text', batch_size, text_max_length, sample_size // 8)
+    val_loader_music = get_dataloader('data/midi_oct', 'valid', 'music', batch_size, music_max_length, sample_size // 8)
     
     # Move model to device
     model.to(device)
