@@ -3,7 +3,9 @@
 #
 
 import os
+import json
 import sys
+from tqdm import tqdm
 import io
 import zipfile
 import miditoolkit
@@ -308,6 +310,31 @@ def get_hash(encoding):
     return midi_hash
 
 
+def sample_middle_preserve_ends(events, max_tokens=8192, num_preserve_front=100, num_preserve_end=100):
+    """
+    保留 events 的前 num_preserve_front 和后 num_preserve_end 个 token，
+    对中间部分均匀采样，使得最终长度不超过 max_tokens。
+    """
+    if len(events) <= max_tokens:
+        return events
+
+    # 保留开头和结尾部分
+    front = events[:num_preserve_front]
+    back = events[-num_preserve_end:]
+    middle = events[num_preserve_front: len(events) - num_preserve_end]
+
+    # 中间部分需要采样到的目标长度
+    target_middle_len = max_tokens - (num_preserve_front + num_preserve_end)
+    if target_middle_len <= 0:
+        # 如果头尾已经超过最大长度，则只保留头尾（或根据需求处理）
+        return front + back
+
+    # 均匀采样中间部分：计算采样步长
+    step = len(middle) / target_middle_len
+    sampled_middle = [middle[int(i * step)] for i in range(target_middle_len)]
+
+    return front + sampled_middle + back
+
 def F(file_name):
     global midi_dict, output_file, lock_file, lock_write, lock_set
     try_times = 10
@@ -375,35 +402,37 @@ def F(file_name):
                       file_name + ' == ' + dup_file_name + '\n', end='')
                 return None
         output_str_list = []
-        sample_step = max(round(sample_len_max / sample_overlap_rate), 1)
-        for p in range(0 - random.randint(0, sample_len_max - 1), len(e), sample_step):
-            L = max(p, 0)
-            R = min(p + sample_len_max, len(e)) - 1
-            bar_index_list = [e[i][0]
-                              for i in range(L, R + 1) if e[i][0] is not None]
-            bar_index_min = 0
-            bar_index_max = 0
-            if len(bar_index_list) > 0:
-                bar_index_min = min(bar_index_list)
-                bar_index_max = max(bar_index_list)
-            offset_lower_bound = -bar_index_min
-            offset_upper_bound = bar_max - 1 - bar_index_max
-            # to make bar index distribute in [0, bar_max)
-            bar_index_offset = random.randint(
-                offset_lower_bound, offset_upper_bound) if offset_lower_bound <= offset_upper_bound else offset_lower_bound
-            e_segment = []
-            for i in e[L: R + 1]:
-                if i[0] is None or i[0] + bar_index_offset < bar_max:
-                    e_segment.append(i)
-                else:
-                    break
-            tokens_per_note = 8
-            output_words = (['<s>'] * tokens_per_note) \
-                + [('<{}-{}>'.format(j, k if j > 0 else k + bar_index_offset) if k is not None else '<unk>') for i in e_segment for j, k in enumerate(i)] \
-                + (['</s>'] * (tokens_per_note - 1)
-                   )  # tokens_per_note - 1 for append_eos functionality of binarizer in fairseq
-            output_str_list.append(' '.join(output_words))
-
+        e_segment = sample_middle_preserve_ends(e)
+        # sample_step = max(round(sample_len_max / sample_overlap_rate), 1)
+        # for p in range(0 - random.randint(0, sample_len_max - 1), len(e), sample_step):
+        #     L = max(p, 0)
+        #     R = min(p + sample_len_max, len(e)) - 1
+        #     bar_index_list = [e[i][0]
+        #                       for i in range(L, R + 1) if e[i][0] is not None]
+        #     bar_index_min = 0
+        #     bar_index_max = 0
+        #     if len(bar_index_list) > 0:
+        #         bar_index_min = min(bar_index_list)
+        #         bar_index_max = max(bar_index_list)
+        #     offset_lower_bound = -bar_index_min
+        #     offset_upper_bound = bar_max - 1 - bar_index_max
+        #     # to make bar index distribute in [0, bar_max)
+        #     bar_index_offset = random.randint(
+        #         offset_lower_bound, offset_upper_bound) if offset_lower_bound <= offset_upper_bound else offset_lower_bound
+        #     e_segment = []
+        #     for i in e[L: R + 1]:
+        #         if i[0] is None or i[0] + bar_index_offset < bar_max:
+        #             e_segment.append(i)
+        #         else:
+        #             break
+        tokens_per_note = 8
+        output_words = encoding_to_str(e_segment)
+        # output_words = (['<s>'] * tokens_per_note) \
+        #     + [('<{}-{}>'.format(j, k if j > 0 else k + bar_index_offset) if k is not None else '<unk>') for i in e_segment for j, k in enumerate(i)] \
+        #     + (['</s>'] * (tokens_per_note - 1)
+        #         )  # tokens_per_note - 1 for append_eos functionality of binarizer in fairseq
+        output_str_list.append(output_words)
+        assert (len(output_str_list) == 1) and (len(e_segment) <= 8192)
         # no empty
         if not all(len(i.split()) > tokens_per_note * 2 - 1 for i in output_str_list):
             print('ERROR(ENCODE): ' + file_name + ' ' + str(e) + '\n', end='')
@@ -416,7 +445,7 @@ def F(file_name):
             return False
         finally:
             lock_write.release()
-        print('SUCCESS: ' + file_name + '\n', end='')
+        # print('SUCCESS: ' + file_name + '\n', end='')
         return True
     except BaseException as e:
         print('ERROR(PROCESS): ' + file_name + ' ' + str(e) + '\n', end='')
@@ -470,35 +499,69 @@ def encoding_to_str(e):
     #     print("midi_dict is NOT initialized correctly.")
     # else:
     #     print("midi_dict initialized successfully.")
-data_path = 'data/midi.zip'
-data_zip = zipfile.ZipFile(data_path, 'r')
-prefix = 'test'
+    
+
+# data_path = 'data/midi.zip'
+# data_zip = zipfile.ZipFile(data_path, 'r')
 # if os.path.exists(prefix):
 #     print('Output path {} already exists!'.format(prefix))
 #     sys.exit(0)
+# file_list = ['data/'+'/'.join(n.split('/')[-3:]).replace('._', '') for n in data_zip.namelist() if n[-4:].lower()
+#                 == '.mid' or n[-5:].lower() == '.midi']
+# random.shuffle(file_list)
+prefix = 'data/midi_oct'
 os.makedirs(prefix, exist_ok=True)
-file_list = ['data/'+'/'.join(n.split('/')[-3:]).replace('._', '') for n in data_zip.namelist() if n[-4:].lower()
-                == '.mid' or n[-5:].lower() == '.midi']
-random.shuffle(file_list)
 gen_dictionary('{}/dict.txt'.format(prefix))
+with open('data/midi_seg_dict.json', 'r') as f:
+    data_dict = json.load(f)
+midi_keys = list(data_dict.keys())
+random.shuffle(midi_keys)
+
+split_dict = {}
 ok_cnt = 0
 all_cnt = 0
+# relations = ["before", "meets", "overlaps", "starts", "during", "finishes", "equals"]
+relations = ["equals"]
+
+if os.path.exists('data/midi_oct/split_dict.json'):
+    with open('data/midi_oct/split_dict.json', 'r') as f:
+        split_dict = json.load(f)
 for sp in ['train', 'valid', 'test']:
-    output_file = '{}/midi_{}.txt'.format(prefix, sp)
-    total_file_cnt = len(file_list)
-    print(total_file_cnt)
-    file_list_split = []
-    if sp == 'train':  # 98%
-        file_list_split = file_list[: 98 * total_file_cnt // 100]
-    if sp == 'valid':  # 1%
-        file_list_split = file_list[98 * total_file_cnt //
-                                    100: 99 * total_file_cnt // 100]
-    if sp == 'test':  # 1%
-        file_list_split = file_list[99 * total_file_cnt // 100:]
-    with Pool(pool_num) as p:
-        result = list(p.imap_unordered(G, file_list_split))
-        all_cnt += sum((1 if i is not None else 0 for i in result))
-        ok_cnt += sum((1 if i is True else 0 for i in result))
-    output_file = ''
+    total_track_cnt = len(midi_keys)
+    print(total_track_cnt)
+    if sp in split_dict: midi_keys_split = split_dict[sp]
+    else: 
+        print('Randomly split dataset...')
+        if sp == 'train':  # 80%
+            midi_keys_split = midi_keys[: 80 * total_track_cnt // 100]
+        if sp == 'valid':  # 10%
+            midi_keys_split = midi_keys[80 * total_track_cnt //
+                                        100: 90 * total_track_cnt // 100]
+        if sp == 'test':  # 10%
+            midi_keys_split = midi_keys[90 * total_track_cnt // 100:]
+        split_dict[sp] = midi_keys_split
+    for rel in relations:
+        if rel == "equals": deduplicate = False
+        else: deduplicate = True
+        os.makedirs(os.path.join(prefix, sp, rel), exist_ok=True)
+        midi_list = []
+        for key in tqdm(midi_keys_split):
+            for pi, pair in enumerate(data_dict[key][rel]):
+                output_file = os.path.join(prefix, sp, rel, f'{key}_{pi}.txt')
+                for seg in pair:
+                    result = G(seg)
+                    all_cnt += 1
+                    if not result:
+                        if os.path.exists(output_file): os.remove(output_file)
+                        break
+                    else: ok_cnt += 1
+                # with Pool(pool_num) as p:
+                #     result = list(p.imap_unordered(G, pair))
+                #     all_cnt += sum((1 if i is not None else 0 for i in result))
+                #     ok_cnt += sum((1 if i is True else 0 for i in result))
+                output_file = ''
+if not os.path.exists('data/midi_oct/split_dict.json'):
+    with open('data/midi_oct/split_dict.json', 'w') as f:
+        json.dump(split_dict, f, indent=4)    
 print('{}/{} ({:.2f}%) MIDI files successfully processed'.format(ok_cnt,
                                                                     all_cnt, ok_cnt / all_cnt * 100))
