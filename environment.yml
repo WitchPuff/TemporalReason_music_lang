@@ -2,26 +2,7 @@ name: mb
 channels:
   - defaults
 dependencies:
-  - blas=1.0=openblas
-  - ca-certificates=2025.2.25=hca03da5_0
-  - libcxx=14.0.6=h848a8c0_0
-  - libffi=3.4.4=hca03da5_1
-  - libgfortran=5.0.0=11_3_0_hca03da5_28
-  - libgfortran5=11.3.0=h009349e_28
-  - libopenblas=0.3.21=h269037a_0
-  - llvm-openmp=14.0.6=hc6e5704_0
-  - ncurses=6.4=h313beb8_0
-  - numpy-base=1.24.3=py38h90707a3_0
-  - openssl=3.0.15=h80987f9_0
-  - pip=24.2=py38hca03da5_0
-  - python=3.8.20=hb885b13_0
-  - readline=8.2=h1a28f6b_0
-  - setuptools=75.1.0=py38hca03da5_0
-  - sqlite=3.45.3=h80987f9_0
-  - tk=8.6.14=h6ba3021_0
-  - wheel=0.44.0=py38hca03da5_0
-  - xz=5.6.4=h80987f9_1
-  - zlib=1.2.13=h18a0788_1
+  - python=3.8.20
   - pip:
       - annotated-types==0.7.0
       - antlr4-python3-runtime==4.8
@@ -35,7 +16,7 @@ dependencies:
       - cython==3.0.12
       - docker-pycreds==0.4.0
       - eval-type-backport==0.2.2
-      - fairseq==1.0.0a0+3369427
+      # - fairseq==1.0.0a0+3369427
       - filelock==3.16.1
       - fonttools==4.56.0
       - fsspec==2025.2.0
@@ -94,4 +75,4 @@ dependencies:
       - urllib3==2.2.3
       - wandb==0.19.8
       - zipp==3.20.2
-prefix: /Applications/anaconda3/envs/mb
+
