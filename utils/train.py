@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate
 from tqdm import tqdm
 import os
+from transformers import get_cosine_schedule_with_warmup
 # Import your configurations
 from config import model, device
 from time import time
@@ -39,7 +40,7 @@ def get_dataloader(data_dir, set_name, type, batch_size=64, max_length=512, samp
 
 
 def train_one_epoch(train_loader_text, train_loader_music, model, 
-                    optimizer, criterion):
+                    optimizer, criterion, scheduler=None):
     """
     Run one epoch of training over the text and music data in parallel (zipping them).
     """
@@ -68,7 +69,7 @@ def train_one_epoch(train_loader_text, train_loader_music, model,
         # Compute loss
         loss_text = criterion(logits_text, yt)
         loss_music = criterion(logits_music, ym)
-        loss = loss_text + loss_music
+        loss = (loss_text + loss_music) / 2
         
         preds_text = torch.argmax(logits_text, dim=1)
         correct_text += (preds_text == yt).sum().item()
@@ -82,6 +83,7 @@ def train_one_epoch(train_loader_text, train_loader_music, model,
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        scheduler.step()
 
         # Accumulate stats
         total_loss += loss.item()
@@ -90,17 +92,18 @@ def train_one_epoch(train_loader_text, train_loader_music, model,
         total_steps += 1
 
         
-        if batch_idx % 10 == 0:
+        if batch_idx % 500 == 0:
             print(f"[Train] Batch {batch_idx}/{len(train_loader_text)} | Loss: {loss.item():.4f}")
-
+            print(f"[Train] LR Scheduler: {scheduler.get_last_lr()[0]}")
         wandb.log(
             {
                 "step": total_steps,
+                "lr": scheduler.get_last_lr()[0],
                 "train":
                     {
-                        "train_both_loss": loss.item(),
-                        "train_text_loss": loss_text.item(),
-                        "train_music_loss": loss_music.item(),
+                        "both_loss": loss.item(),
+                        "text_loss": loss_text.item(),
+                        "music_loss": loss_music.item(),
                     }, 
                 
             }
@@ -163,12 +166,15 @@ def parse_args():
 
     parser = argparse.ArgumentParser(description="Train SharedModel with text and music datasets.")
 
-    parser.add_argument("--epochs", type=int, default=40, help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=10, help="Batch size for training")
+    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size for training")
     parser.add_argument("--text_max_length", type=int, default=512, help="Batch size for training")
     parser.add_argument("--music_max_length", type=int, default=1024, help="Batch size for training")
-    parser.add_argument("--sample_size", type=int, default=10000, help="Batch size for training")
+    parser.add_argument("--sample_size", type=int, default=None, help="Batch size for training")
+    parser.add_argument("--warmup_step", type=int, default=30000, help="Batch size for training")
+    parser.add_argument("--decay_step", type=int, default=10000000, help="Batch size for training")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--weight_decay", type=float, default=1e-5, help="Learning rate")
     parser.add_argument("--ckpt_dir", type=str, default="train_logs/ckpt", help="Checkpoint directory")
     
     return parser.parse_args()
@@ -199,16 +205,23 @@ def main():
     # Prepare Datasets
     train_loader_text = get_dataloader('data/text', 'train', 'text', batch_size, text_max_length, sample_size)
     train_loader_music = get_dataloader('data/midi_oct', 'train', 'music', batch_size, music_max_length, sample_size)
-    test_loader_text = get_dataloader('data/text', 'test', 'text', batch_size, text_max_length, sample_size // 8)
-    test_loader_music = get_dataloader('data/midi_oct', 'test', 'music', batch_size, music_max_length, sample_size // 8)
-    val_loader_text = get_dataloader('data/text', 'valid', 'text', batch_size, text_max_length, sample_size // 8)
-    val_loader_music = get_dataloader('data/midi_oct', 'valid', 'music', batch_size, music_max_length, sample_size // 8)
+    test_loader_text = get_dataloader('data/text', 'test', 'text', batch_size, text_max_length, sample_size // 8 if sample_size else None)
+    test_loader_music = get_dataloader('data/midi_oct', 'test', 'music', batch_size, music_max_length, sample_size // 8 if sample_size else None)
+    val_loader_text = get_dataloader('data/text', 'valid', 'text', batch_size, text_max_length, sample_size // 8 if sample_size else None)
+    val_loader_music = get_dataloader('data/midi_oct', 'valid', 'music', batch_size, music_max_length, sample_size // 8 if sample_size else None)
     
     # Move model to device
     model.to(device)
+    # 设定超参数
 
+    # 初始化优化器
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
+
+    # 创建 Warmup + Cosine Decay Scheduler
+    scheduler = get_cosine_schedule_with_warmup(optimizer, 
+                                            num_warmup_steps=args.warmup_step, 
+                                            num_training_steps=args.decay_step)
     # Create optimizer and loss function
-    optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss()
     min_loss = float('inf')
     
@@ -217,11 +230,10 @@ def main():
         print(f"\n=== Epoch {epoch}/{epochs} ===")
         
         print("=== Training ===")
-        avg_train_loss, avg_text_loss, avg_music_loss, text_acc, music_acc = train_one_epoch(train_loader_text, train_loader_music, model, optimizer, criterion)
+        avg_train_loss, avg_text_loss, avg_music_loss, text_acc, music_acc = train_one_epoch(train_loader_text, train_loader_music, model, optimizer, criterion, scheduler)
         if avg_train_loss < min_loss:
             min_loss = avg_train_loss
             model.save_weights(os.path.join(ckpt_dir, f"checkpoints_best.pth"))
-        
         print(f"[Epoch {epoch}] Average Training Loss: {avg_train_loss:.4f}")
         print(f"[Epoch {epoch}] Average Text Loss: {avg_text_loss:.4f}")
         print(f"[Epoch {epoch}] Text Accuracy: {text_acc * 100:.2f}%")

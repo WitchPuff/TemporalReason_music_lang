@@ -39,7 +39,8 @@ class TextDataset(Dataset):
             max_length=self.max_length,
             return_tensors="pt"
         )
-        if len(encoded_text["input_ids"]) > self.max_length:
+        if not encoded_text["input_ids"].shape[1] == self.max_length:
+            # print(f"Text length unmatched: {encoded_text['input_ids'].shape[1]} - {self.max_length}")
             return None
         
         label = torch.tensor(self.relations[label], dtype=torch.long)
