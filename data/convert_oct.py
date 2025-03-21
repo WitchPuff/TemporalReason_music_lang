@@ -520,8 +520,7 @@ random.shuffle(midi_keys)
 split_dict = {}
 ok_cnt = 0
 all_cnt = 0
-# relations = ["before", "meets", "overlaps", "starts", "during", "finishes", "equals"]
-relations = ["equals"]
+relations = ["before", "after", "is_included", "simultaneous"]
 
 if os.path.exists('data/midi_oct/split_dict.json'):
     with open('data/midi_oct/split_dict.json', 'r') as f:

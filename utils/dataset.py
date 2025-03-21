@@ -8,17 +8,20 @@ import torch
 from torch.utils.data.dataloader import default_collate
 import pandas as pd
 from torch.utils.data import Dataset
-from config import model, text_label_dict, music_label_dict, device
+from config import model, text_label_dict, music_label_dict, device, sample_dict
 
 class TextDataset(Dataset):
     def __init__(self, data_dir='data/text', set_name='train', 
-                sample_size=None, max_length=512, relations=text_label_dict):
+                sample_size=None, max_length=512, relations=text_label_dict,
+                max_samples=sample_dict):
         
         data_path = os.path.join(data_dir, f"{set_name}_data.csv")
         self.data_list = pd.read_csv(data_path)
         if sample_size:
-            self.data_list = self.data_list.sample(sample_size)
-
+            self.data_list = self.data_list.groupby('Answer', group_keys=False).apply(lambda x: x.sample(frac=sample_size / len(self.data_list)))
+        elif max_samples:
+            total = max_samples[set_name]
+            self.data_list = self.data_list.groupby('Answer', group_keys=False).apply(lambda x: x.sample(frac=total / len(self.data_list)))
         self.tokenizer = model.text_encoder.tokenizer
         self.max_length = max_length
         self.relations = relations
@@ -51,9 +54,10 @@ class TextDataset(Dataset):
 
 class MusicDataset(Dataset):
     def __init__(self, data_dir='data/midi_oct', set_name='train', 
-                random_pair=True, sample_size=None,
-                max_length = 512,
-                relations=music_label_dict):
+                random_pair=False, sample_size=None,
+                max_length = 1024,
+                relations=music_label_dict,
+                max_sample = sample_dict):
         
         self.data_dir = os.path.join(data_dir, set_name)
         self.txt_list = [
@@ -64,6 +68,8 @@ class MusicDataset(Dataset):
         random.shuffle(self.txt_list)
         if sample_size:
             self.txt_list = self.txt_list[:sample_size]
+        elif max_sample:
+            self.txt_list = self.txt_list[:max_sample[set_name]]
         self.random_pair = random_pair
         self.relations = relations
         self.max_length = max_length
@@ -75,11 +81,12 @@ class MusicDataset(Dataset):
     def truncate_center(self, tokenized_text, keep_bound_length=None):
 
         seq_length = len(tokenized_text)
+        print(seq_length, self.max_length)
         # 如果长度已经在范围内，直接返回
         if seq_length <= self.max_length:
             return tokenized_text
         
-        if keep_bound_length is None: keep_bound_length = self.max_length // 4
+        if keep_bound_length is None: keep_bound_length = self.max_length // 3
 
         # 计算需要删除的 token 数
         num_tokens_to_remove = seq_length - self.max_length
@@ -127,10 +134,10 @@ class MusicDataset(Dataset):
 
 
 if __name__ == '__main__':
-    train_dataset_music = MusicDataset(data_dir='data/midi_oct', set_name='test', sample_size=120)
-    train_loader_music = DataLoader(train_dataset_music, batch_size=20, shuffle=True, collate_fn=lambda batch: default_collate([b for b in batch if b is not None]))
-    train_dataset_text = TextDataset(data_dir='data/text', set_name='test', sample_size=100)
-    train_loader_text = DataLoader(train_dataset_text, batch_size=20, shuffle=True, collate_fn=lambda batch: default_collate([b for b in batch if b is not None]))
+    train_dataset_music = MusicDataset(data_dir='data/midi_oct', set_name='test')
+    train_loader_music = DataLoader(train_dataset_music, batch_size=32, shuffle=True, collate_fn=lambda batch: default_collate([b for b in batch if b is not None]))
+    train_dataset_text = TextDataset(data_dir='data/text', set_name='test')
+    train_loader_text = DataLoader(train_dataset_text, batch_size=32, shuffle=True, collate_fn=lambda batch: default_collate([b for b in batch if b is not None]))
 
     for batch_idx, (xt_yt, xm_ym) in enumerate(zip(train_loader_text, train_loader_music)):
         print(f"Batch {batch_idx + 1}")

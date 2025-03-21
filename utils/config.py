@@ -25,8 +25,18 @@ mf_param = {
 text_label_dict = {rel: i for i, rel in enumerate(['BEFORE', 'AFTER', 'IS_INCLUDED', 'SIMULTANEOUS'])}
 text_label_dict.update({i:rel for i, rel in enumerate(['BEFORE', 'AFTER', 'IS_INCLUDED', 'SIMULTANEOUS'])})
 
-music_label_dict = {rel:i for i, rel in enumerate(["before", "meets", "overlaps", "starts", "during", "finishes", "equals"])}
-music_label_dict.update({i:rel for i, rel in enumerate(["before", "meets", "overlaps", "starts", "during", "finishes", "equals"])})
+music_label_dict = {rel: i for i, rel in enumerate(['before', 'after', 'is_included', 'simultaneous'])}
+music_label_dict.update({i:rel for i, rel in enumerate(['before', 'after', 'is_included', 'simultaneous'])})
+
+# run data/text/helper.py to get the following dict
+sample_dict = {
+    'train': 78000,
+    'valid': 9750,
+    'test': 9750
+}
+
+# music_label_dict = {rel:i for i, rel in enumerate(["before", "meets", "overlaps", "starts", "during", "finishes", "equals"])}
+# music_label_dict.update({i:rel for i, rel in enumerate(["before", "meets", "overlaps", "starts", "during", "finishes", "equals"])})
         
 model = SharedModel(
         mf_param        = mf_param,
@@ -34,6 +44,6 @@ model = SharedModel(
         hidden_dim      = 768,
         num_heads       = 8,
         num_layers      = 4,
-        text_num_classes= 4,  # or 7, if your text data has 7 classes; 
-        music_num_classes=7
+        text_num_classes= 4,
+        music_num_classes=4
     )

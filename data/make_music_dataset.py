@@ -73,14 +73,18 @@ def check(relation, t1, d1, t2, d2, total_duration):
         return False
     if relation == "before":
         return t1 < t1 + d1 < t2 < t2 + d2
+    elif relation == "after":
+        return t2 < t2 + d2 < t1 < t1 + d1
     elif relation == "meets":
         return t1 < t1 + d1 == t2 < t2 + d2
-    elif relation == "overlaps":
+    elif relation == "overlaps" or relation == 'simultaneous':
         return t1 < t2 < t1 + d1 < t2 + d2
     elif relation == "starts":
         return t1 == t2 < t2 + d2 < t1 + d1
     elif relation == "during":
         return t1 < t2 < t2 + d2 < t1 + d1
+    elif relation == "is_included":
+        return t2 < t1 < t1 + d1 < t2 + d2
     elif relation == "finishes":
         return t1 < t2 < t2 + d2 == t1 + d1
     elif relation == "equals":
@@ -88,15 +92,16 @@ def check(relation, t1, d1, t2, d2, total_duration):
     else:
         raise ValueError("未知的关系类型！")
 
-def generate_relation_samples(midi_path, relations=["before", "meets", "overlaps", "starts", "during", "finishes", "equals"],
-                              num_pairs_per_relation=2, output_dir='data/midi_segs'):
+def generate_relation_samples(midi_path, relations=["before", "after", "is_included", "simultaneous"],
+                            num_pairs_per_relation=1, output_dir='data/midi_segs',
+                            time_limit=6):
     # 用 Base62 编码对路径生成哈希，避免文件名过长
     path_hash = encode_path_base62(midi_path)
     midi_data = pretty_midi.PrettyMIDI(midi_path)
     total_duration = midi_data.get_end_time()
 
-    if total_duration < 31:
-        raise ValueError("MIDI文件时长不足30秒！")
+    if total_duration < time_limit:
+        raise ValueError(f"MIDI文件时长不足{time_limit}秒！")
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -105,34 +110,39 @@ def generate_relation_samples(midi_path, relations=["before", "meets", "overlaps
     with ThreadPoolExecutor(max_workers=4) as write_executor:
         write_futures = []
         for rel in relations:
+            rel = rel.lower()
             for pair_idx in range(num_pairs_per_relation):
                 max_attempts = 100
                 for attempt in range(max_attempts):
                     # 随机选取时长，注意这里可以视情况去掉部分 round() 操作以减少微小开销
-                    d1 = random.uniform(15, min(30, total_duration / 2))
-                    d2 = random.uniform(15, min(30, total_duration / 2))
+                    d1 = random.uniform(time_limit//2, min(time_limit, total_duration / 2))
+                    d2 = random.uniform(time_limit//2, min(time_limit, total_duration / 2))
                     # 对于某些关系要求 d1 >= d2
                     if rel not in ["before", "meets", "overlaps"]:
                         if abs(d1 - d2) < 1:
                             continue
-                        dt = d1
-                        d1 = max(d2, dt)
-                        d2 = min(d2, dt)
-                    t1 = random.uniform(0, total_duration - d2 - d1 - 0.1)
-                    if rel == "before":
-                        t2 = random.uniform(t1 + d1 + 0.5, total_duration - d2 - 0.1)
+                        d1, d2 = max(d1, d2), min(d1, d2)
+                    t1 = random.uniform(0, total_duration - d2 - d1 - 1)
+                    if rel == "before" or rel == "after":
+                        # t2 = random.uniform(t1 + d1 + 0.5, total_duration - d2 - 0.1)
+                        t2 = random.uniform(t1 + d1 + 0.5, t1 + d1*2)
+                        if rel == 'after':
+                            t1, t2 = t2, t1
                     elif rel == "meets":
                         t2 = t1 + d1
-                    elif rel == "overlaps":
-                        lower = t1 + 0.1
-                        upper = t1 + d1 - 0.1
+                    elif rel == "overlaps" or rel == 'simultaneous':
+                        lower = t1 + 1
+                        upper = t1 + d1 - 1
                         t2 = random.uniform(lower, upper)
                     elif rel == "starts":
                         t2 = t1
-                    elif rel == "during":
-                        lower = t1 + 0.1
-                        upper = t1 + d1 - d2 - 0.1
+                    elif rel == "during" or rel == 'is_included':
+                        lower = t1 + 1
+                        upper = t1 + d1 - d2 - 1
                         t2 = random.uniform(lower, upper)
+                        if rel == 'is_included':
+                            t1, t2 = t2, t1
+                            d1, d2 = d2, d1
                     elif rel == "finishes":
                         t2 = t1 + d1 - d2
                     elif rel == "equals":
@@ -182,7 +192,8 @@ if __name__ == '__main__':
 
     seg_dict = {}
     failed = []
-    relations = ["before", "meets", "overlaps", "starts", "during", "finishes", "equals"]
+    # relations = ["before", "meets", "overlaps", "starts", "during", "finishes", "equals"]
+    relations = ["before", "after", "is_included", "simultaneous"]
     count = {rel: 0 for rel in relations}
 
     num_workers = os.cpu_count() or 4
