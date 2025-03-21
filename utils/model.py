@@ -103,10 +103,10 @@ class SharedModel(nn.Module):
 
     def __init__(self, mf_param: dict = None, tf_param: dict=None,
                     hidden_dim=768, num_heads=8, num_layers=4,
-                    text_num_classes=7, music_num_classes=4):
+                    text_num_classes=4, music_num_classes=4):
         super().__init__()
-        self.music_encoder = MusicEncoder(**mf_param)
-        self.text_encoder = TextEncoder(**tf_param)
+        self.music_encoder = MusicEncoder(**mf_param if mf_param else {})
+        self.text_encoder = TextEncoder(**tf_param if tf_param else {})
         self.transformer_block = SharedTransformerBlock(hidden_dim=hidden_dim, num_heads=num_heads, num_layers=num_layers)
         self.ffn = FeedForwardLayer()
         self.text_classifier = TaskClassifier(input_dim=hidden_dim, num_classes=text_num_classes)
@@ -148,3 +148,7 @@ class SharedModel(nn.Module):
             y = self.text_classifier(x)
 
         return y
+
+if __name__ == '__main__':
+    model = SharedModel()
+    print(model)
