@@ -65,9 +65,8 @@ class MusicEncoder(nn.Module):
 
 class TextEncoder(nn.Module):
     def __init__(self, 
-                 model_name="FacebookAI/roberta-base"):
+                 model_name="data/ckpt/roberta-base"):
         super().__init__()
-                # Load model directly
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForMaskedLM.from_pretrained(model_name)
