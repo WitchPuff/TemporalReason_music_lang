@@ -166,13 +166,13 @@ def parse_args():
 
     parser = argparse.ArgumentParser(description="Train SharedModel with text and music datasets.")
 
-    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+    parser.add_argument("--epochs", type=int, default=60, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size for training")
     parser.add_argument("--text_max_length", type=int, default=512, help="Batch size for training")
     parser.add_argument("--music_max_length", type=int, default=1024, help="Batch size for training")
     parser.add_argument("--sample_size", type=int, default=None, help="Batch size for training")
-    parser.add_argument("--warmup_step", type=int, default=30000, help="Batch size for training")
-    parser.add_argument("--decay_step", type=int, default=10000000, help="Batch size for training")
+    parser.add_argument("--warmup_step", type=int, default=10000, help="Batch size for training")
+    parser.add_argument("--decay_step", type=int, default=100000, help="Batch size for training")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
     parser.add_argument("--weight_decay", type=float, default=1e-5, help="Learning rate")
     parser.add_argument("--ckpt_dir", type=str, default="train_logs/ckpt", help="Checkpoint directory")
@@ -186,7 +186,7 @@ def main():
     name = ''
     for k, v in train_config.items():
         if k == 'ckpt_dir': continue
-        name += f"{k}={v}_"
+        name += f"{k}-{v}_"
     name += str(time())
     wandb.init(
         project="music-text-temporal-relation",

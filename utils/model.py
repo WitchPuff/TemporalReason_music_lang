@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from fairseq.models.roberta import RobertaModel
 from transformers import AutoTokenizer, AutoModelForMaskedLM
-
+import os
 
 
 class TaskClassifier(nn.Module):
@@ -119,6 +119,7 @@ class SharedModel(nn.Module):
             "text_classifier": self.text_classifier.state_dict(),
             "music_classifier": self.music_classifier.state_dict()
         }
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         torch.save(weights_to_save, path)
         print(f"Weights saved to {path}.")
 

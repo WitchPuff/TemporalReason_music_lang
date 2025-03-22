@@ -17,15 +17,28 @@ class TextDataset(Dataset):
         
         data_path = os.path.join(data_dir, f"{set_name}_data.csv")
         self.data_list = pd.read_csv(data_path)
-        if sample_size:
-            self.data_list = self.data_list.groupby('Answer', group_keys=False).apply(lambda x: x.sample(frac=sample_size / len(self.data_list)))
-        elif max_samples:
-            total = max_samples[set_name]
-            self.data_list = self.data_list.groupby('Answer', group_keys=False).apply(lambda x: x.sample(frac=total / len(self.data_list)))
         self.tokenizer = model.text_encoder.tokenizer
         self.max_length = max_length
         self.relations = relations
 
+        if sample_size:
+            labels = self.data_list['Answer'].unique()
+            num_labels = len(labels)
+            per_class_sample = sample_size // num_labels
+
+            self.data_list = self.data_list.groupby('Answer', group_keys=False).apply(
+                lambda x: x.sample(n=min(len(x), per_class_sample), random_state=42)
+            ).reset_index(drop=True)
+
+        elif max_samples:
+            total = max_samples[set_name]
+            labels = self.data_list['Answer'].unique()
+            num_labels = len(labels)
+            per_class_sample = total // num_labels
+
+            self.data_list = self.data_list.groupby('Answer', group_keys=False).apply(
+                lambda x: x.sample(n=min(len(x), per_class_sample), random_state=42)
+            ).reset_index(drop=True)
 
     def __len__(self):
         return len(self.data_list)
@@ -81,17 +94,14 @@ class MusicDataset(Dataset):
     def truncate_center(self, tokenized_text, keep_bound_length=None):
 
         seq_length = len(tokenized_text)
-        print(seq_length, self.max_length)
         # 如果长度已经在范围内，直接返回
         if seq_length <= self.max_length:
             return tokenized_text
         
-        if keep_bound_length is None: keep_bound_length = self.max_length // 3
+        if keep_bound_length is None: keep_bound_length = min(seq_length // 2, self.max_length // 3)
 
         # 计算需要删除的 token 数
         num_tokens_to_remove = seq_length - self.max_length
-        if seq_length < (2 * keep_bound_length):  # 确保前后部分不超过总长
-            raise ValueError(f"Sequence too short for truncation: {seq_length}")
 
         # 提取前后保留的部分
         prefix = tokenized_text[:keep_bound_length]
@@ -122,7 +132,8 @@ class MusicDataset(Dataset):
             random.shuffle(tokenized_texts)
         try:
             oct_pair = torch.stack([self.padded(t, musicbert) for t in tokenized_texts])
-        except:
+        except Exception as e:
+            print(f"truncate/pad error: {e}")
             return None
         if any(len(t) > self.max_length for t in oct_pair):
                 return None  # 跳过这个样本

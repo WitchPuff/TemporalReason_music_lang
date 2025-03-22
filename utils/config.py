@@ -23,10 +23,10 @@ mf_param = {
 }
 
 text_label_dict = {rel: i for i, rel in enumerate(['BEFORE', 'AFTER', 'IS_INCLUDED', 'SIMULTANEOUS'])}
-text_label_dict.update({i:rel for i, rel in enumerate(['BEFORE', 'AFTER', 'IS_INCLUDED', 'SIMULTANEOUS'])})
+# text_label_dict.update({i:rel for i, rel in enumerate(['BEFORE', 'AFTER', 'IS_INCLUDED', 'SIMULTANEOUS'])})
 
 music_label_dict = {rel: i for i, rel in enumerate(['before', 'after', 'is_included', 'simultaneous'])}
-music_label_dict.update({i:rel for i, rel in enumerate(['before', 'after', 'is_included', 'simultaneous'])})
+# music_label_dict.update({i:rel for i, rel in enumerate(['before', 'after', 'is_included', 'simultaneous'])})
 
 # run data/text/helper.py to get the following dict
 sample_dict = {
