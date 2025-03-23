@@ -12,7 +12,7 @@ from dataset import TextDataset, MusicDataset
 import wandb
 
 
-def get_dataloader(data_dir, set_name, type, ckpt_dir, batch_size=64, max_length=512, sample_size=None):
+def get_dataloader(data_dir, set_name, type, ckpt_dir, batch_size=64, max_length=512, sample_size=None, num_workers=4):
     if type == 'text':
         dataset = TextDataset(
             data_dir=data_dir,
@@ -32,6 +32,7 @@ def get_dataloader(data_dir, set_name, type, ckpt_dir, batch_size=64, max_length
     loader = DataLoader(
         dataset,
         batch_size=batch_size,
+        num_workers=num_workers,
         shuffle=True if set_name == 'train' else False,
         collate_fn=lambda batch: default_collate([b for b in batch if b is not None])
     )
@@ -177,6 +178,7 @@ def parse_args():
     parser.add_argument("--sample_size", type=int, default=8000, help="Batch size for training")
     parser.add_argument("--warmup_step", type=int, default=1000, help="Batch size for training")
     parser.add_argument("--decay_step", type=int, default=50000, help="Batch size for training")
+    parser.add_argument("--num_workers", type=int, default=4, help="Batch size for training")
     parser.add_argument("--lr", type=float, default=8e-5, help="Learning rate")
     parser.add_argument("--weight_decay", type=float, default=1e-5, help="Learning rate")
     parser.add_argument("--ckpt_dir", type=str, default="train_logs/ckpt", help="Checkpoint directory")
@@ -207,12 +209,12 @@ def main():
     text_max_length = args.text_max_length
     music_max_length = args.music_max_length
     # Prepare Datasets
-    train_loader_text = get_dataloader('data/text', 'train', 'text', ckpt_dir, batch_size, text_max_length, sample_size)
-    train_loader_music = get_dataloader('data/midi_oct', 'train', 'music', ckpt_dir, batch_size, music_max_length, sample_size)
-    test_loader_text = get_dataloader('data/text', 'test', 'text', ckpt_dir, batch_size, text_max_length, sample_size // 8 if sample_size else None)
-    test_loader_music = get_dataloader('data/midi_oct', 'test', 'music', ckpt_dir, batch_size, music_max_length, sample_size // 8 if sample_size else None)
-    val_loader_text = get_dataloader('data/text', 'valid', 'text', ckpt_dir, batch_size, text_max_length, sample_size // 8 if sample_size else None)
-    val_loader_music = get_dataloader('data/midi_oct', 'valid', 'music', ckpt_dir, batch_size, music_max_length, sample_size // 8 if sample_size else None)
+    train_loader_text = get_dataloader('data/text', 'train', 'text', ckpt_dir, batch_size, text_max_length, sample_size, args.num_workers)
+    train_loader_music = get_dataloader('data/midi_oct', 'train', 'music', ckpt_dir, batch_size, music_max_length, sample_size, args.num_workers)
+    test_loader_text = get_dataloader('data/text', 'test', 'text', ckpt_dir, batch_size, text_max_length, sample_size // 8 if sample_size else None, args.num_workers)
+    test_loader_music = get_dataloader('data/midi_oct', 'test', 'music', ckpt_dir, batch_size, music_max_length, sample_size // 8 if sample_size else None, args.num_workers)
+    val_loader_text = get_dataloader('data/text', 'valid', 'text', ckpt_dir, batch_size, text_max_length, sample_size // 8 if sample_size else None, args.num_workers)
+    val_loader_music = get_dataloader('data/midi_oct', 'valid', 'music', ckpt_dir, batch_size, music_max_length, sample_size // 8 if sample_size else None, args.num_workers)
     
     # Move model to device
     model.to(device)
