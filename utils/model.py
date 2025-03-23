@@ -153,3 +153,4 @@ class SharedModel(nn.Module):
 if __name__ == '__main__':
     model = SharedModel()
     print(model)
+    print(model.transformer_block.layers)

@@ -3,7 +3,7 @@ from torch.utils.data import Dataset, DataLoader
 import os
 import pandas as pd
 import random
-import os
+import json
 import torch
 from torch.utils.data.dataloader import default_collate
 import pandas as pd
@@ -13,33 +13,30 @@ from config import model, text_label_dict, music_label_dict, device, sample_dict
 class TextDataset(Dataset):
     def __init__(self, data_dir='data/text', set_name='train', 
                 sample_size=None, max_length=512, relations=text_label_dict,
-                max_samples=sample_dict):
-        
-        data_path = os.path.join(data_dir, f"{set_name}_data.csv")
-        self.data_list = pd.read_csv(data_path)
+                max_sample=sample_dict, text_csv=None):
+        if text_csv:
+            self.data_list = pd.read_csv(text_csv)
+        else:
+            data_path = os.path.join(data_dir, f"{set_name}_data.csv")
+            self.data_list = pd.read_csv(data_path)
+
         self.tokenizer = model.text_encoder.tokenizer
         self.max_length = max_length
         self.relations = relations
+        num_labels = len(relations.keys())
 
         if sample_size:
-            labels = self.data_list['Answer'].unique()
-            num_labels = len(labels)
+            if max_sample and sample_size > max_sample[set_name]:
+                sample_size = max_sample[set_name] 
             per_class_sample = sample_size // num_labels
-
             self.data_list = self.data_list.groupby('Answer', group_keys=False).apply(
                 lambda x: x.sample(n=min(len(x), per_class_sample), random_state=42)
             ).reset_index(drop=True)
 
-        elif max_samples:
-            total = max_samples[set_name]
-            labels = self.data_list['Answer'].unique()
-            num_labels = len(labels)
-            per_class_sample = total // num_labels
-
-            self.data_list = self.data_list.groupby('Answer', group_keys=False).apply(
-                lambda x: x.sample(n=min(len(x), per_class_sample), random_state=42)
-            ).reset_index(drop=True)
-
+    def save_data_list(self, path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        self.data_list.to_csv(path, index=False)
+    
     def __len__(self):
         return len(self.data_list)
 
@@ -70,23 +67,48 @@ class MusicDataset(Dataset):
                 random_pair=False, sample_size=None,
                 max_length = 1024,
                 relations=music_label_dict,
-                max_sample = sample_dict):
+                max_sample = sample_dict,
+                txt_list_json = None):
         
         self.data_dir = os.path.join(data_dir, set_name)
-        self.txt_list = [
-            os.path.join(root, f)
-            for root, _, files in os.walk(self.data_dir) for f in files
-            if os.path.isfile(os.path.join(root, f))
-        ]
-        random.shuffle(self.txt_list)
-        if sample_size:
-            self.txt_list = self.txt_list[:sample_size]
-        elif max_sample:
-            self.txt_list = self.txt_list[:max_sample[set_name]]
+        if txt_list_json:
+            self.txt_list = json.load(open(txt_list_json, 'r'))
+        else:
+            self.txt_list = [
+                os.path.join(root, f)
+                for root, _, files in os.walk(self.data_dir) for f in files
+                if os.path.isfile(os.path.join(root, f))
+            ]
+        # random.shuffle(self.txt_list)
         self.random_pair = random_pair
         self.relations = relations
         self.max_length = max_length
-        
+        num_labels = len(relations.keys())
+
+        if sample_size:
+            if max_sample and sample_size > max_sample[set_name]:
+                sample_size = max_sample[set_name] 
+            per_class_sample = sample_size // num_labels
+            
+            label_to_files = {label: [] for label in relations.keys()}
+            for txt_file in self.txt_list:
+                label_name = os.path.basename(os.path.dirname(txt_file))  # same as txt_file.split('/')[-2]
+                if label_name in label_to_files:
+                    label_to_files[label_name].append(txt_file)
+
+            sampled_txt_list = []
+            for label_name, files in label_to_files.items():
+                n = min(len(files), per_class_sample)
+                sampled = random.sample(files, n)
+                sampled_txt_list.extend(sampled)
+
+            self.txt_list = sampled_txt_list
+
+    def save_data_list(self, path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            json.dump(self.txt_list, f, indent=4)
+    
     def __len__(self):
         return len(self.txt_list)
 

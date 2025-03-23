@@ -30,9 +30,9 @@ music_label_dict = {rel: i for i, rel in enumerate(['before', 'after', 'is_inclu
 
 # run data/text/helper.py to get the following dict
 sample_dict = {
-    'train': 78000,
-    'valid': 9750,
-    'test': 9750
+    'train': 54000,
+    'valid': 6750,
+    'test': 6750
 }
 
 # music_label_dict = {rel:i for i, rel in enumerate(["before", "meets", "overlaps", "starts", "during", "finishes", "equals"])}

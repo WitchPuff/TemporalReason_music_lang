@@ -6,29 +6,29 @@ from torch.utils.data.dataloader import default_collate
 from tqdm import tqdm
 import os
 from transformers import get_cosine_schedule_with_warmup
-# Import your configurations
 from config import model, device
 from time import time
-# Import your dataset classes
 from dataset import TextDataset, MusicDataset
 import wandb
 
 
-def get_dataloader(data_dir, set_name, type, batch_size=64, max_length=512, sample_size=None):
+def get_dataloader(data_dir, set_name, type, ckpt_dir, batch_size=64, max_length=512, sample_size=None):
     if type == 'text':
         dataset = TextDataset(
-        data_dir=data_dir,
-        set_name=set_name,
-        sample_size=sample_size,
-        max_length=max_length,
+            data_dir=data_dir,
+            set_name=set_name,
+            sample_size=sample_size,
+            max_length=max_length,
         )
+        dataset.save_data_list(os.path.join(ckpt_dir, 'text', f"{set_name}_data.csv"))
     else:
         dataset = MusicDataset(
-        data_dir=data_dir,
-        set_name=set_name,
-        sample_size=sample_size,
-        max_length=max_length
+            data_dir=data_dir,
+            set_name=set_name,
+            sample_size=sample_size,
+            max_length=max_length
         )
+        dataset.save_data_list(os.path.join(ckpt_dir, 'music', f"{set_name}_data.json"))
     loader = DataLoader(
         dataset,
         batch_size=batch_size,
@@ -51,7 +51,11 @@ def train_one_epoch(train_loader_text, train_loader_music, model,
     correct_music, total_music = 0, 0
     
 
-    for batch_idx, (xt_yt, xm_ym) in enumerate(zip(train_loader_text, train_loader_music)):
+    for batch_idx, (xt_yt, xm_ym) in tqdm(
+        enumerate(zip(train_loader_text, train_loader_music)),
+        total=min(len(train_loader_text), len(train_loader_music)),
+        desc="Training Batches"
+        ):
         # Unpack text data
         xti, xta, yt = xt_yt[0].to(device), xt_yt[1].to(device), xt_yt[2].to(device)
         xt = {
@@ -98,7 +102,7 @@ def train_one_epoch(train_loader_text, train_loader_music, model,
         wandb.log(
             {
                 "step": total_steps,
-                "lr": scheduler.get_last_lr()[0],
+                "lr": float(scheduler.get_last_lr()[0]),
                 "train":
                     {
                         "both_loss": loss.item(),
@@ -166,14 +170,14 @@ def parse_args():
 
     parser = argparse.ArgumentParser(description="Train SharedModel with text and music datasets.")
 
-    parser.add_argument("--epochs", type=int, default=60, help="Number of training epochs")
+    parser.add_argument("--epochs", type=int, default=40, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size for training")
     parser.add_argument("--text_max_length", type=int, default=512, help="Batch size for training")
     parser.add_argument("--music_max_length", type=int, default=1024, help="Batch size for training")
-    parser.add_argument("--sample_size", type=int, default=None, help="Batch size for training")
-    parser.add_argument("--warmup_step", type=int, default=10000, help="Batch size for training")
-    parser.add_argument("--decay_step", type=int, default=100000, help="Batch size for training")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--sample_size", type=int, default=8000, help="Batch size for training")
+    parser.add_argument("--warmup_step", type=int, default=1000, help="Batch size for training")
+    parser.add_argument("--decay_step", type=int, default=50000, help="Batch size for training")
+    parser.add_argument("--lr", type=float, default=8e-5, help="Learning rate")
     parser.add_argument("--weight_decay", type=float, default=1e-5, help="Learning rate")
     parser.add_argument("--ckpt_dir", type=str, default="train_logs/ckpt", help="Checkpoint directory")
     
@@ -203,12 +207,12 @@ def main():
     text_max_length = args.text_max_length
     music_max_length = args.music_max_length
     # Prepare Datasets
-    train_loader_text = get_dataloader('data/text', 'train', 'text', batch_size, text_max_length, sample_size)
-    train_loader_music = get_dataloader('data/midi_oct', 'train', 'music', batch_size, music_max_length, sample_size)
-    test_loader_text = get_dataloader('data/text', 'test', 'text', batch_size, text_max_length, sample_size // 8 if sample_size else None)
-    test_loader_music = get_dataloader('data/midi_oct', 'test', 'music', batch_size, music_max_length, sample_size // 8 if sample_size else None)
-    val_loader_text = get_dataloader('data/text', 'valid', 'text', batch_size, text_max_length, sample_size // 8 if sample_size else None)
-    val_loader_music = get_dataloader('data/midi_oct', 'valid', 'music', batch_size, music_max_length, sample_size // 8 if sample_size else None)
+    train_loader_text = get_dataloader('data/text', 'train', 'text', ckpt_dir, batch_size, text_max_length, sample_size)
+    train_loader_music = get_dataloader('data/midi_oct', 'train', 'music', ckpt_dir, batch_size, music_max_length, sample_size)
+    test_loader_text = get_dataloader('data/text', 'test', 'text', ckpt_dir, batch_size, text_max_length, sample_size // 8 if sample_size else None)
+    test_loader_music = get_dataloader('data/midi_oct', 'test', 'music', ckpt_dir, batch_size, music_max_length, sample_size // 8 if sample_size else None)
+    val_loader_text = get_dataloader('data/text', 'valid', 'text', ckpt_dir, batch_size, text_max_length, sample_size // 8 if sample_size else None)
+    val_loader_music = get_dataloader('data/midi_oct', 'valid', 'music', ckpt_dir, batch_size, music_max_length, sample_size // 8 if sample_size else None)
     
     # Move model to device
     model.to(device)
