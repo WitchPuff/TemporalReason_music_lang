@@ -79,7 +79,7 @@ class MusicDataset(Dataset):
                 for root, _, files in os.walk(self.data_dir) for f in files
                 if os.path.isfile(os.path.join(root, f))
             ]
-        # random.shuffle(self.txt_list)
+        random.shuffle(self.txt_list)
         self.random_pair = random_pair
         self.relations = relations
         self.max_length = max_length

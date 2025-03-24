@@ -41,7 +41,7 @@ class MusicEncoder(nn.Module):
                  checkpoint_file='data/ckpt/checkpoint_last_musicbert_base_w_genre_head.pt',
                  data_path='data/midi_oct',
                  user_dir='model/musicbert',
-                 random_pair=True):
+                 random_pair=False):
         super().__init__()
         self.musicbert = RobertaModel.from_pretrained(
             '.',
@@ -68,8 +68,8 @@ class TextEncoder(nn.Module):
                  model_name="data/ckpt/roberta-base"):
         super().__init__()
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForMaskedLM.from_pretrained(model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
+        self.model = AutoModelForMaskedLM.from_pretrained(model_name, local_files_only=True)
         
         for param in self.model.parameters():
             param.requires_grad = False
@@ -131,7 +131,7 @@ class SharedModel(nn.Module):
         self.music_classifier.load_state_dict(checkpoint["music_classifier"], strict=strict)
         print(f"Weights loaded from {path}.")
     
-    def forward(self, x, type='text'):
+    def forward(self, x, type='text', return_trsfm_embedding=False):
 
         if type == 'music':
             x0 = self.music_encoder(x[:, 0, :])
@@ -141,6 +141,7 @@ class SharedModel(nn.Module):
             x = self.text_encoder(x)
             
         x = self.transformer_block(x)
+        if return_trsfm_embedding: return x
         x = self.ffn(x)
 
         if type == 'music':
@@ -149,6 +150,8 @@ class SharedModel(nn.Module):
             y = self.text_classifier(x)
 
         return y
+    
+
 
 if __name__ == '__main__':
     model = SharedModel()

@@ -19,7 +19,6 @@ mf_param = {
     'checkpoint_file': 'data/ckpt/checkpoint_last_musicbert_base_w_genre_head.pt',
     'data_path': 'data/midi_oct',
     'user_dir': 'model/musicbert',
-    'random_pair': True
 }
 
 text_label_dict = {rel: i for i, rel in enumerate(['BEFORE', 'AFTER', 'IS_INCLUDED', 'SIMULTANEOUS'])}
@@ -39,8 +38,6 @@ sample_dict = {
 # music_label_dict.update({i:rel for i, rel in enumerate(["before", "meets", "overlaps", "starts", "during", "finishes", "equals"])})
         
 model = SharedModel(
-        mf_param        = mf_param,
-        tf_param        = tf_param,
         hidden_dim      = 768,
         num_heads       = 8,
         num_layers      = 4,
