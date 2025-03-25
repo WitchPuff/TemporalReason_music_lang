@@ -8,7 +8,7 @@ import torch
 from torch.utils.data.dataloader import default_collate
 import pandas as pd
 from torch.utils.data import Dataset
-from config import model, text_label_dict, music_label_dict, device, sample_dict
+from config import global_model, text_label_dict, music_label_dict, device, sample_dict
 
 class TextDataset(Dataset):
     def __init__(self, data_dir='data/text', set_name='train', 
@@ -20,7 +20,7 @@ class TextDataset(Dataset):
             data_path = os.path.join(data_dir, f"{set_name}_data.csv")
             self.data_list = pd.read_csv(data_path)
 
-        self.tokenizer = model.text_encoder.tokenizer
+        self.tokenizer = global_model.text_encoder.tokenizer
         self.max_length = max_length
         self.relations = relations
         num_labels = len(relations.keys())
@@ -28,10 +28,28 @@ class TextDataset(Dataset):
         if sample_size:
             if max_sample and sample_size > max_sample[set_name]:
                 sample_size = max_sample[set_name] 
-            per_class_sample = sample_size // num_labels
-            self.data_list = self.data_list.groupby('Answer', group_keys=False).apply(
-                lambda x: x.sample(n=min(len(x), per_class_sample), random_state=42)
-            ).reset_index(drop=True)
+                
+            groups = self.data_list.groupby('Answer')
+            num_labels = len(groups)
+            per_class = sample_size // num_labels
+            # 第一轮：每个类别采样 min(per_class, group size)
+            sampled = [group.sample(n=min(per_class, len(group)), random_state=42)
+                    for _, group in groups]
+            sampled_df = pd.concat(sampled)
+
+            # 计算当前已采样数量
+            current_size = len(sampled_df)
+            shortfall = sample_size - current_size
+
+            if shortfall > 0:
+                # 构造剩余数据集（未采样的部分）
+                remainder = self.data_list.drop(sampled_df.index)
+                # 从剩余数据中随机补齐 shortfall 个样本（注意可能不足，取全部）
+                extra = remainder.sample(n=min(shortfall, len(remainder)), random_state=42)
+                sampled_df = pd.concat([sampled_df, extra])
+
+            self.data_list = sampled_df.sample(frac=1, random_state=42).reset_index(drop=True)
+                
 
     def save_data_list(self, path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -146,7 +164,7 @@ class MusicDataset(Dataset):
         with open(txt_file, 'r', encoding='utf-8') as f:
             oct_pair = [line.strip() for line in f.readlines() if line.strip()]
         label = torch.tensor(self.relations[txt_file.split('/')[-2]])
-        musicbert = model.music_encoder.musicbert
+        musicbert = global_model.music_encoder.musicbert
         musicbert.eval()
         
         tokenized_texts = [musicbert.task.source_dictionary.encode_line(line) for line in oct_pair]
@@ -172,6 +190,8 @@ if __name__ == '__main__':
     train_dataset_text = TextDataset(data_dir='data/text', set_name='test')
     train_loader_text = DataLoader(train_dataset_text, batch_size=32, shuffle=True, collate_fn=lambda batch: default_collate([b for b in batch if b is not None]))
 
+    model = global_model
+    
     for batch_idx, (xt_yt, xm_ym) in enumerate(zip(train_loader_text, train_loader_music)):
         print(f"Batch {batch_idx + 1}")
         xti, xta, yt = xt_yt[0].to(device), xt_yt[1].to(device), xt_yt[2].to(device)

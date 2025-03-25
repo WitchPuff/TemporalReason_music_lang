@@ -4,15 +4,16 @@ import numpy as np
 from sklearn.decomposition import PCA
 from dataset import TextDataset, MusicDataset
 from torch.utils.data import DataLoader, default_collate
-from config import device
+from config import global_model
 import seaborn as sns
 import pandas as pd
 from tqdm import tqdm
-from model import SharedModel
+import os
 
-
+device = 'cpu'
 
 def get_embeddings(model, loader, modality='text'):
+    
     """
     提取给定 loader 中样本经过 shared transformer block 后的 embedding.
     返回 embedding (N x hidden_dim) 和对应的 label list.
@@ -43,18 +44,13 @@ def compute_mean_distance(emb1, emb2):
     return np.mean(dists)
 
 if __name__ == '__main__':
-    model = SharedModel(
-            hidden_dim      = 768,
-            num_heads       = 8,
-            num_layers      = 4,
-            text_num_classes= 4,
-            music_num_classes=4
-        )
+    model = global_model
     # prepare data
-    ckpt_dir = 'train_logs/ckpt/epochs-40_batch_size-32_text_max_length-512_music_max_length-1024_sample_size-8000_warmup_step-1000_decay_step-50000_lr-8e-05_weight_decay-1e-05_1742733002.8590322'
-
+    ckpt_dir = 'train_logs/ckpt/epochs-60_batch_size-32_text_max_length-512_music_max_length-1024_sample_size-None_warmup_step-10000_decay_step-100000_lr-0.0001_weight_decay-1e-05_1742624957.1600728'
+    model.load_weights(os.path.join(ckpt_dir, 'checkpoints_best.pth'))
+    
     music_dataset = MusicDataset(
-        set_name='test',
+        set_name='train',
         sample_size=100,
         # txt_list_json=os.path.join(ckpt_dir, 'music/test_data.json')
     )
@@ -67,7 +63,7 @@ if __name__ == '__main__':
     )
 
     text_dataset = TextDataset(
-        set_name='test',
+        set_name='train',
         sample_size=100,
     )
 
@@ -77,38 +73,63 @@ if __name__ == '__main__':
         shuffle=False,
         collate_fn=lambda batch: default_collate([b for b in batch if b is not None])
     )
-
+    result_dir = 'results/embedding_analysis'
+    os.makedirs(result_dir, exist_ok=True)
     
     
     # get embedding
     emb_text, labels_text = get_embeddings(model, text_loader, modality='text')
     emb_music, labels_music = get_embeddings(model, music_loader, modality='music')
-
     print('Text Embedding Shape: ', emb_text.shape, labels_text.shape)
     print('Music Embedding Shape: ', emb_music.shape, labels_music.shape)
     
     # 合并两个模态的数据，并加上一个标记区分模态
     emb_all = np.concatenate([emb_text, emb_music], axis=0)
     modalities = np.array(["text"] * emb_text.shape[0] + ["music"] * emb_music.shape[0])
+    
+    labels = ['BEFORE', 'AFTER', 'IS_INCLUDED', 'SIMULTANEOUS']
+    labels_text = np.array([labels[l] for l in labels_text])
+    labels_music = np.array([labels[l] for l in labels_music])
     labels_all = np.concatenate([labels_text, labels_music], axis=0)
+    
 
     # 对 embedding 做 PCA 降维到2维
     pca = PCA(n_components=2)
-    emb_pca = pca.fit_transform(emb_all)
 
-    # 可视化：以不同颜色标记不同类别，并用不同 marker 标识模态
+    # 生成文本和音乐的 PCA 图像
+    def plot_pca(embeddings, labels, modalities, title, filename):
+        emb_pca = pca.fit_transform(embeddings)
+        df = pd.DataFrame({
+            'PC1': emb_pca[:, 0],
+            'PC2': emb_pca[:, 1],
+            'Label': labels,
+            'Modality': modalities
+        })
+        plt.figure(figsize=(10, 10))
+        sns.scatterplot(data=df, x='PC1', y='PC2', hue='Label', style='Modality', s=80)
+        plt.title(title)
+        plt.savefig(os.path.join(result_dir, filename))
+        print(f"PCA plot saved to {filename}")
+        plt.close()
 
-    df = pd.DataFrame({
-        'PC1': emb_pca[:, 0],
-        'PC2': emb_pca[:, 1],
-        'Label': labels_all,
-        'Modality': modalities
-    })
+    # 全部数据的 PCA 图像
+    plot_pca(emb_all, labels_all, modalities, "PCA of Shared Embeddings for Text and Music", 'pca.png')
 
-    plt.figure(figsize=(8, 6))
-    sns.scatterplot(data=df, x='PC1', y='PC2', hue='Label', style='Modality', s=80)
-    plt.title("PCA of Shared Embeddings for Text and Music")
-    plt.show()
+    # 仅文本数据的 PCA 图像
+    plot_pca(emb_text, labels_text, ["text"] * emb_text.shape[0], "PCA of Text Embeddings", 'pca_text.png')
+
+    # 仅音乐数据的 PCA 图像
+    plot_pca(emb_music, labels_music, ["music"] * emb_music.shape[0], "PCA of Music Embeddings", 'pca_music.png')
+
+    # 每个标签的文本和音乐的 PCA 图像
+    for label in np.unique(labels_all):
+        emb_text_label = emb_text[labels_text == label]
+        emb_music_label = emb_music[labels_music == label]
+        emb_label = np.concatenate([emb_text_label, emb_music_label], axis=0)
+        modalities_label = np.array(["text"] * emb_text_label.shape[0] + ["music"] * emb_music_label.shape[0])
+        labels_label = [label] * emb_label.shape[0]
+        plot_pca(emb_label, labels_label, modalities_label, f"PCA of Embeddings for Label {label}", f'pca_{label}.png')
+
 
 
 
@@ -131,4 +152,5 @@ if __name__ == '__main__':
     plt.xlabel("Temporal Relation Label")
     plt.ylabel("Mean Euclidean Distance\n(text vs music)")
     plt.title("Mean Distance of Shared Embeddings Across Modalities per Label")
-    plt.show()
+    
+    plt.savefig(os.path.join(result_dir, 'mean_distance.png'))

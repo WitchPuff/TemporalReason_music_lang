@@ -6,13 +6,13 @@ from torch.utils.data.dataloader import default_collate
 from tqdm import tqdm
 import os
 from transformers import get_cosine_schedule_with_warmup
-from config import model, device
+from config import global_model, device
 from time import time
 from dataset import TextDataset, MusicDataset
 import wandb
 
 
-def get_dataloader(data_dir, set_name, type, ckpt_dir, batch_size=64, max_length=512, sample_size=None):
+def get_dataloader(data_dir, set_name, type, ckpt_dir, batch_size=32, max_length=512, sample_size=None):
     if type == 'text':
         dataset = TextDataset(
             data_dir=data_dir,
@@ -170,15 +170,15 @@ def parse_args():
 
     parser = argparse.ArgumentParser(description="Train SharedModel with text and music datasets.")
 
-    parser.add_argument("--epochs", type=int, default=40, help="Number of training epochs")
+    parser.add_argument("--epochs", type=int, default=60, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size for training")
     parser.add_argument("--text_max_length", type=int, default=512, help="Batch size for training")
     parser.add_argument("--music_max_length", type=int, default=1024, help="Batch size for training")
-    parser.add_argument("--sample_size", type=int, default=8000, help="Batch size for training")
-    parser.add_argument("--warmup_step", type=int, default=1000, help="Batch size for training")
-    parser.add_argument("--decay_step", type=int, default=50000, help="Batch size for training")
-    parser.add_argument("--lr", type=float, default=8e-5, help="Learning rate")
-    parser.add_argument("--weight_decay", type=float, default=1e-5, help="Learning rate")
+    parser.add_argument("--sample_size", type=int, default=78016, help="Batch size for training")
+    parser.add_argument("--warmup_step", type=int, default=5000, help="Batch size for training")
+    parser.add_argument("--decay_step", type=int, default=80000, help="Batch size for training")
+    parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
+    parser.add_argument("--weight_decay", type=float, default=0.03, help="Learning rate")
     parser.add_argument("--ckpt_dir", type=str, default="train_logs/ckpt", help="Checkpoint directory")
     
     return parser.parse_args()
@@ -213,13 +213,13 @@ def main():
     test_loader_music = get_dataloader('data/midi_oct', 'test', 'music', ckpt_dir, batch_size, music_max_length, sample_size // 8 if sample_size else None)
     val_loader_text = get_dataloader('data/text', 'valid', 'text', ckpt_dir, batch_size, text_max_length, sample_size // 8 if sample_size else None)
     val_loader_music = get_dataloader('data/midi_oct', 'valid', 'music', ckpt_dir, batch_size, music_max_length, sample_size // 8 if sample_size else None)
-    
+    model = global_model
     # Move model to device
     model.to(device)
     # 设定超参数
 
     # 初始化优化器
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=args.weight_decay)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=args.weight_decay, betas=(0.9, 0.999))
 
     # 创建 Warmup + Cosine Decay Scheduler
     scheduler = get_cosine_schedule_with_warmup(optimizer, 

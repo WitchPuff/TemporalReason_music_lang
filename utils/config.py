@@ -12,7 +12,8 @@ else:
     print("使用 CPU 进行计算")
 
 tf_param = {
-    'model_name': 'roberta-base'
+    'model_name': 'data/ckpt/roberta-base'
+    # 'model_name': 'roberta-base'
 }
 
 mf_param = {
@@ -27,20 +28,22 @@ text_label_dict = {rel: i for i, rel in enumerate(['BEFORE', 'AFTER', 'IS_INCLUD
 music_label_dict = {rel: i for i, rel in enumerate(['before', 'after', 'is_included', 'simultaneous'])}
 # music_label_dict.update({i:rel for i, rel in enumerate(['before', 'after', 'is_included', 'simultaneous'])})
 
+
 # run data/text/helper.py to get the following dict
 sample_dict = {
-    'train': 54000,
-    'valid': 6750,
-    'test': 6750
+    'train': 78018,
+    'valid': 9753,
+    'test': 9753
 }
 
 # music_label_dict = {rel:i for i, rel in enumerate(["before", "meets", "overlaps", "starts", "during", "finishes", "equals"])}
 # music_label_dict.update({i:rel for i, rel in enumerate(["before", "meets", "overlaps", "starts", "during", "finishes", "equals"])})
         
-model = SharedModel(
+global_model = SharedModel(
         hidden_dim      = 768,
         num_heads       = 8,
         num_layers      = 4,
         text_num_classes= 4,
-        music_num_classes=4
+        music_num_classes=4,
+        dropout_rate    = 0.2
     )

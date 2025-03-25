@@ -88,11 +88,12 @@ class TextEncoder(nn.Module):
         return feature.detach()
 
 class FeedForwardLayer(nn.Module):
-    def __init__(self, hidden_dim=768):
+    def __init__(self, hidden_dim=768, dropout_rate=0.2):
         super().__init__()
         self.ffn = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim * 4),
             nn.ReLU(),
+            nn.Dropout(dropout_rate),
             nn.Linear(hidden_dim * 4, hidden_dim)
         )
 
@@ -103,7 +104,7 @@ class SharedModel(nn.Module):
 
     def __init__(self, mf_param: dict = None, tf_param: dict=None,
                     hidden_dim=768, num_heads=8, num_layers=4,
-                    text_num_classes=4, music_num_classes=4):
+                    text_num_classes=4, music_num_classes=4, dropout_rate=0.2):
         super().__init__()
         self.music_encoder = MusicEncoder(**mf_param if mf_param else {})
         self.text_encoder = TextEncoder(**tf_param if tf_param else {})
@@ -111,7 +112,8 @@ class SharedModel(nn.Module):
         self.ffn = FeedForwardLayer()
         self.text_classifier = TaskClassifier(input_dim=hidden_dim, num_classes=text_num_classes)
         self.music_classifier = TaskClassifier(input_dim=hidden_dim, num_classes=music_num_classes)
-
+        self.dropout = nn.Dropout(p=dropout_rate)
+        
     def save_weights(self, path):
         weights_to_save = {
             "transformer_block": self.transformer_block.state_dict(),
@@ -142,6 +144,7 @@ class SharedModel(nn.Module):
             
         x = self.transformer_block(x)
         if return_trsfm_embedding: return x
+        x = self.dropout(x)
         x = self.ffn(x)
 
         if type == 'music':
